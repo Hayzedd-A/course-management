@@ -42,8 +42,20 @@ const instructorSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+const studentSchema = new mongoose.Schema(
+  {
+    firstname: { type: String, required: true },
+    lastname: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+  },
+  {
+    timestamps: true,
+  }
+);
 
 const Instructor = mongoose.model("Instructor", instructorSchema);
+const Student = mongoose.model("Student", studentSchema);
 
 const OTP = mongoose.model("OTP", otpSchema);
 
