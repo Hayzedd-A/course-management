@@ -4,9 +4,10 @@ const {
   joiException,
   exception,
   generateOTP,
+  excludeInstructorPrivateData,
 } = require("../utils/functions.utils");
 const { jwtSigner } = require("../utils/jwt.utils");
-const { hashPassword } = require("../utils/password.utils");
+const { hashPassword, comparePassword } = require("../utils/password.utils");
 const validator = require("../validations/instructor.validation");
 // instructor creates an account
 const createInstructor = async (req, res, next) => {
@@ -98,7 +99,125 @@ const verifyEmailOtp = async (req, res, next) => {
   }
 };
 
+const resendOTP = async (req, res, next) => {
+  try {
+    const { error } = validator.resendOtp(req.params);
+    if (error) throw joiException(error);
+    const { email } = req.params;
+    const otpData = await OTP.findOne({ email });
+    if (!otpData) throw exception("Email not found", 400);
+
+    const [otp, expiry] = generateOTP();
+    otpData.otp = otp;
+    otpData.expiry = expiry;
+    await otpData.save();
+
+    const emailContent = `
+    Thank you for verifying your email. Use the code below to verify your account. \n ${otp}. \n The otp expires in 10 minutes`;
+    const [emailResponse] = await Promise.all([
+      sendEmail("Verify your Email", email, emailContent),
+    ]);
+
+    if (emailResponse instanceof Error) {
+      throw exception("Error sending an OTP, Please try again", 503);
+    }
+    res.status(200).json({
+      success: true,
+      message: "OTP sent successfully",
+    });
+  } catch (error) {
+    console.error("Error resending OTP:", error);
+    next(error);
+  }
+};
+
+const login = async (req, res, next) => {
+  try {
+    const { error } = validator.login(req.body);
+    if (error) throw joiException(error);
+    const { email, password } = req.body;
+    const instructor = await Instructor.findOne({ email });
+    if (!instructor) throw exception("Invalid email or password", 401);
+    const isValid = await comparePassword(password, instructor.password);
+    if (!isValid) throw exception("Invalid email or password", 401);
+    const token = await jwtSigner(email);
+    res.setHeader("token", token);
+    res.status(200).json({
+      success: true,
+      message: "Logged in successfully",
+      data: excludeInstructorPrivateData(instructor.toObject()),
+    });
+  } catch (error) {
+    console.error("Error logging in:", error);
+    next(error);
+  }
+};
+
+const initForgetPassword = async (req, res, next) => {
+  try {
+    const { error } = validator.resendOtp(req.params);
+    if (error) throw joiException(error);
+    const { email } = req.params;
+    const instructor = await Instructor.findOne({ email });
+    if (!instructor) throw exception("Email not found", 400);
+    const [otp, expiry] = generateOTP();
+    otpData = new OTP({
+      _id: instructor._id,
+      email: email,
+      otp: otp,
+      expiry: expiry,
+    });
+    await otpData.save();
+    const emailContent = `
+    Please use the code below to reset your password. \n ${otp}. \n The otp expires in 10 minutes`;
+    const emailResponse = await sendEmail(
+      "Reset Password",
+      instructor.email,
+      emailContent
+    );
+    if (emailResponse instanceof Error) {
+      throw exception("Error sending an OTP, Please try again", 503);
+    }
+    res.status(200).json({
+      success: true,
+      message: "OTP sent successfully",
+    });
+  } catch (error) {
+    console.log(error);
+    next(error);
+  }
+};
+
+const completePasswordReset = async (req, res, next) => {
+  try {
+    const { error } = validator.resetPassword(req.body);
+    if (error) throw joiException(error);
+    const { otp, email, password } = req.body;
+    const otpData = await OTP.findOne({ email });
+    if (!otpData) throw exception("Email not found", 400);
+    if (otpData.otp !== otp || new Date() > otpData.expiry)
+      throw exception("Invalid or expired OTP", 401);
+    const instructor = await Instructor.findOne({ _id: otpData._id });
+    if (!instructor) throw exception("User not found", 404);
+    const [hashedPassword] = await hashPassword(password);
+    instructor.password = hashedPassword;
+    await instructor.save();
+    await OTP.deleteOne({ _id: otpData._id });
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully",
+    });
+  } catch (error) {
+    console.error("Error resetting password:", error);
+    next(error);
+  }
+};
+
 module.exports = {
   createInstructor,
   verifyEmailOtp,
+  resendOTP,
+  login,
+  initForgetPassword,
+  completePasswordReset,
 };

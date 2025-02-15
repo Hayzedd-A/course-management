@@ -5,7 +5,9 @@ const colors = require("colors");
 const cors = require("cors");
 const connectDB = require("./config/mongoose.config");
 const authRoutes = require("./routes/authentication.routes");
+const courseRoutes = require("./routes/course.routes");
 const errorHandler = require("./middleware/ErrorHandler");
+const path = require("path");
 
 const app = express();
 
@@ -35,5 +37,8 @@ app.get("/", (req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/courses", courseRoutes);
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// Error Handling middleware
 app.use(errorHandler);

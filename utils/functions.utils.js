@@ -30,8 +30,17 @@ const generateOTP = () => {
   return [otp, expiryDate];
 };
 
+const excludeInstructorPrivateData = ({
+  password,
+  __v,
+  createdAt,
+  updatedAt,
+  ...rest
+}) => rest;
+
 module.exports = {
   joiException,
   generateOTP,
   exception,
+  excludeInstructorPrivateData,
 };
